@@ -74,9 +74,24 @@ function chips(box, data, key) {
     box.append(b);
   }
 }
-const drawMenu = () => { chips($('#themes'), THEMES, 'theme'); chips($('#weapons'), WEAPONS, 'weapon'); chips($('#levels'), LEVELS, 'level'); };
+const getThemes = () => sel.theme.split(',').filter(k => THEMES[k]);
+let activeThemes = [];
+function themeChips() {
+  const box = $('#themes'); box.innerHTML = '';
+  for (const k in THEMES) {
+    const b = document.createElement('button'), d = THEMES[k];
+    b.className = 'chip' + (getThemes().includes(k) ? ' on' : ''); b.textContent = d.icon + ' ' + d.name;
+    b.onclick = () => {
+      let a = getThemes(); a = a.includes(k) ? a.filter(x => x !== k) : [...a, k];
+      if (!a.length) a = [k];
+      sel.theme = a.join(','); b.classList.toggle('on', a.includes(k)); [...box.children].forEach((c, i) => c.classList.toggle('on', a.includes(Object.keys(THEMES)[i])));
+    };
+    box.append(b);
+  }
+}
+const drawMenu = () => { themeChips(); chips($('#weapons'), WEAPONS, 'weapon'); chips($('#levels'), LEVELS, 'level'); };
 drawMenu();
-$('#file').onchange = e => { [...e.target.files].forEach(f => addCustom(URL.createObjectURL(f))); sel.theme = 'custom'; drawMenu(); };
+$('#file').onchange = e => { [...e.target.files].forEach(f => addCustom(URL.createObjectURL(f))); sel.theme = [...new Set([...getThemes(), 'custom'])].join(','); drawMenu(); };
 
 // ---- scene ----
 const renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: true });
@@ -106,7 +121,8 @@ async function loadMe() {
   player = ($('#name').value.trim() || 'Pemain').slice(0, 20); try { localStorage.setItem('shoot3d-name', player); } catch {}
   const me = await api('/api/player?name=' + encodeURIComponent(player)); if (!me) return;
   serverBest = me.best || {};
-  if (me.prefs) { for (const [k, D] of [['theme', THEMES], ['weapon', WEAPONS], ['level', LEVELS]]) if (me.prefs[k] in D && me.prefs[k] !== 'custom') sel[k] = me.prefs[k]; drawMenu(); }
+  if (me.prefs) { const ts = String(me.prefs.theme || '').split(',').filter(k => THEMES[k] && k !== 'custom'); if (ts.length) sel.theme = ts.join(',');
+    for (const [k, D] of [['weapon', WEAPONS], ['level', LEVELS]]) if (me.prefs[k] in D) sel[k] = me.prefs[k]; drawMenu(); }
 }
 async function board() {
   const r = await api('/api/leaderboard?level=' + sel.level), ol = $('#lb'); ol.innerHTML = '';
@@ -122,7 +138,7 @@ function beep(f) {
 }
 
 function spawn() {
-  const L = LEVELS[sel.level], th = THEMES[sel.theme];
+  const L = LEVELS[sel.level], th = THEMES[activeThemes[Math.random() * activeThemes.length | 0]];
   const g = th.build(); g.scale.setScalar(L.size);
   const z = -(10 + Math.random() * 12), hh = Math.tan(cam.fov * Math.PI / 360) * -z, hw = hh * cam.aspect + 2, dir = Math.random() < .5 ? 1 : -1;
   g.position.set(-dir * hw, (Math.random() - .5) * hh * 1.3, z);
@@ -169,7 +185,7 @@ $('#c').addEventListener('pointerdown', e => { aim(e); if (running) fire(); });
 function clearScene() { for (const a of [targets, projs, fx]) { for (const o of a) scene.remove(o.m || o); a.length = 0; } }
 
 function start() {
-  if (sel.theme === 'custom' && !customImgs.length) sel.theme = 'campur';
+  activeThemes = getThemes().filter(k => k !== 'custom' || customImgs.length); if (!activeThemes.length) activeThemes = ['campur'];
   clearScene(); clearFx(); try { setView(); } catch (e) { console.error(e); view = null; } hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
   player = ($('#name').value.trim() || 'Pemain').slice(0, 20); api('/api/player', { name: player, prefs: sel });
   if (view) view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
