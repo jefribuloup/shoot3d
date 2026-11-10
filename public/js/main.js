@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WEAPONS, LEVELS } from './config.js';
+import { explode, updateFx, clearFx, makeView, updateView } from './fx.js';
 import { THEMES, addCustom, customImgs } from './targets.js';
 
 const $ = s => document.querySelector(s);
@@ -35,11 +36,26 @@ function resize() { renderer.setSize(innerWidth, innerHeight, false); cam.aspect
 addEventListener('resize', resize); resize();
 
 // ---- state ----
-let running = false, score = 0, combo = 0, timeLeft = 0, spawnT = 0, last = 0, ac;
+let running = false, hits = 0, shots = 0, shake = 0, kick = 0, view, player = 'Pemain', serverBest = {}, score = 0, combo = 0, timeLeft = 0, spawnT = 0, last = 0, ac;
 const targets = [], projs = [], fx = [];
 const ndc = new THREE.Vector2(), ray = new THREE.Raycaster();
 const bestKey = () => 'shoot3d-best-' + sel.level;
-const best = () => { try { return +localStorage.getItem(bestKey()) || 0; } catch { return 0; } };
+const best = () => { let l = 0; try { l = +localStorage.getItem(bestKey()) || 0; } catch {} return Math.max(l, serverBest[sel.level] || 0); };
+scene.add(cam);
+const setView = () => { if (view) cam.remove(view); view = makeView(sel.weapon); view.visible = false; cam.add(view); };
+async function api(url, body) { try { const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined); return r.ok ? await r.json() : null; } catch { return null; } }
+async function loadMe() {
+  player = ($('#name').value.trim() || 'Pemain').slice(0, 20); try { localStorage.setItem('shoot3d-name', player); } catch {}
+  const me = await api('/api/player?name=' + encodeURIComponent(player)); if (!me) return;
+  serverBest = me.best || {};
+  if (me.prefs) { for (const [k, D] of [['theme', THEMES], ['weapon', WEAPONS], ['level', LEVELS]]) if (me.prefs[k] in D && me.prefs[k] !== 'custom') sel[k] = me.prefs[k]; drawMenu(); }
+}
+async function board() {
+  const r = await api('/api/leaderboard?level=' + sel.level), ol = $('#lb'); ol.innerHTML = '';
+  (r?.rows || []).forEach((x, i) => { const li = document.createElement('li'); li.textContent = `${x.name} — ${x.score}`; if (x.name === player) li.className = 'me'; ol.append(li); });
+}
+try { $('#name').value = localStorage.getItem('shoot3d-name') || ''; } catch {}
+$('#name').onchange = loadMe; loadMe();
 
 function beep(f) {
   try { ac = ac || new AudioContext(); const o = ac.createOscillator(), g = ac.createGain();
@@ -59,8 +75,8 @@ function spawn() {
 function removeFrom(arr, o) { scene.remove(o.m || o); const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); }
 
 function hit(t) {
-  const u = t.userData; if (u.dead) return; u.dead = .001;
-  combo++; score += 10 * LEVELS[sel.level].mult * Math.min(combo, 5); beep(880);
+  const u = t.userData; if (u.dead) return; u.dead = 1;
+  combo++; hits++; score += 10 * LEVELS[sel.level].mult * Math.min(combo, 5); beep(880); explode(scene, t); shake = .6; removeFrom(targets, t);
 }
 const knife = () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.BoxGeometry(.05, .12, .6), new THREE.MeshBasicMaterial({ color: 0xdddddd })));
   const h = new THREE.Mesh(new THREE.BoxGeometry(.07, .1, .3), new THREE.MeshBasicMaterial({ color: 0x5c3b1e })); h.position.z = -.4; g.add(h); return g; };
@@ -70,7 +86,7 @@ const arrow = () => { const g = new THREE.Group(); const s = new THREE.Mesh(new 
 
 function fire() {
   const now = performance.now() / 1000, W = WEAPONS[sel.weapon];
-  if (now - last < W.cd) return; last = now; beep(W.f);
+  if (now - last < W.cd) return; last = now; shots++; kick = 1; beep(W.f);
   ray.setFromCamera(ndc, cam);
   const o = ray.ray.origin.clone().add(new THREE.Vector3(0, -.5, -1).applyQuaternion(cam.quaternion)), d = ray.ray.direction.clone();
   if (!W.speed) {
@@ -96,18 +112,22 @@ function clearScene() { for (const a of [targets, projs, fx]) { for (const o of 
 
 function start() {
   if (sel.theme === 'custom' && !customImgs.length) sel.theme = 'campur';
-  clearScene(); score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
-  $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
+  clearScene(); clearFx(); setView(); hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
+  player = ($('#name').value.trim() || 'Pemain').slice(0, 20); api('/api/player', { name: player, prefs: sel });
+  view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
 }
-function end() {
-  running = false; $('#hud').hidden = true;
+async function end() {
+  running = false; view.visible = false; $('#hud').hidden = true;
   const b = Math.max(best(), score); try { localStorage.setItem(bestKey(), b); } catch {}
+  serverBest[sel.level] = b;
   $('#endt').textContent = score >= LEVELS[sel.level].goal ? '🏆 Menang!' : '💥 Waktu Habis';
   $('#es').textContent = score; $('#eb').textContent = b; $('#end').hidden = false;
+  await api('/api/score', { name: player, score, hits, shots, theme: sel.theme, weapon: sel.weapon, level: sel.level });
+  board();
 }
 $('#start').onclick = $('#again').onclick = start;
 $('#home').onclick = () => { $('#end').hidden = true; $('#menu').hidden = false; };
-$('#quit').onclick = () => { running = false; $('#hud').hidden = true; $('#menu').hidden = false; };
+$('#quit').onclick = () => { running = false; view.visible = false; $('#hud').hidden = true; $('#menu').hidden = false; };
 
 function loop(ts) {
   requestAnimationFrame(loop);
@@ -131,6 +151,9 @@ function loop(ts) {
     const t = targets.find(t => !t.userData.dead && t.position.distanceTo(p.m.position) < t.userData.r + p.r);
     if (t) { hit(t); removeFrom(projs, p); } else if (p.life <= 0) { combo = 0; removeFrom(projs, p); }
   }
+  updateFx(dt); kick = Math.max(0, kick - dt * 6); shake = Math.max(0, shake - dt * 3);
+  cam.position.set((Math.random() - .5) * shake * .2, (Math.random() - .5) * shake * .2, 0);
+  if (view) updateView(view, ndc, cam, kick, performance.now() / 1000 - last >= WEAPONS[sel.weapon].cd * .9);
   for (const f of [...fx]) { f.life -= dt; if (f.life <= 0) removeFrom(fx, f); }
   renderer.render(scene, cam);
 }
