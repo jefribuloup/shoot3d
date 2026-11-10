@@ -24,7 +24,7 @@ def q(sql, args=(), fetch=False):
 @app.before_request
 def init():
     global _ready
-    if _ready:
+    if _ready or not request.path.startswith("/api"):
         return
     pk = "SERIAL PRIMARY KEY" if URL else "INTEGER PRIMARY KEY AUTOINCREMENT"
     q("CREATE TABLE IF NOT EXISTS players(name TEXT PRIMARY KEY, prefs TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
@@ -42,6 +42,20 @@ def num(d, k, m):
         return max(0, min(int(d.get(k) or 0), m))
     except (TypeError, ValueError):
         return 0
+
+
+@app.errorhandler(Exception)
+def on_error(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    return jsonify(error=str(e)[:200]), 500
+
+
+@app.route("/api/health")
+def health():
+    q("SELECT 1", fetch=True)
+    return jsonify(ok=True, db="postgres" if URL else "sqlite")
 
 
 @app.route("/")
