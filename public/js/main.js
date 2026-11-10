@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { WEAPONS, LEVELS } from './config.js';
-import { explode, updateFx, clearFx, makeView, updateView } from './fx.js';
+import { explode, updateFx, clearFx, makeView, updateView } from './fx.js?v=3';
 import { THEMES, addCustom, customImgs } from './targets.js';
 
 const $ = s => document.querySelector(s);
+const showErr = m => { const d = $('#err'); if (d) { d.hidden = false; d.textContent = '⚠ ' + m; } };
+window.addEventListener('error', e => showErr(e.message));
+window.addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 const sel = { theme: 'buah', weapon: 'pistol', level: 'easy' };
 
 function chips(box, data, key) {
@@ -112,12 +115,12 @@ function clearScene() { for (const a of [targets, projs, fx]) { for (const o of 
 
 function start() {
   if (sel.theme === 'custom' && !customImgs.length) sel.theme = 'campur';
-  clearScene(); clearFx(); setView(); hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
+  clearScene(); clearFx(); try { setView(); } catch (e) { console.error(e); view = null; } hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
   player = ($('#name').value.trim() || 'Pemain').slice(0, 20); api('/api/player', { name: player, prefs: sel });
-  view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
+  if (view) view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
 }
 async function end() {
-  running = false; view.visible = false; $('#hud').hidden = true;
+  running = false; if (view) view.visible = false; $('#hud').hidden = true;
   const b = Math.max(best(), score); try { localStorage.setItem(bestKey(), b); } catch {}
   serverBest[sel.level] = b;
   $('#endt').textContent = score >= LEVELS[sel.level].goal ? '🏆 Menang!' : '💥 Waktu Habis';
@@ -127,7 +130,7 @@ async function end() {
 }
 $('#start').onclick = $('#again').onclick = start;
 $('#home').onclick = () => { $('#end').hidden = true; $('#menu').hidden = false; };
-$('#quit').onclick = () => { running = false; view.visible = false; $('#hud').hidden = true; $('#menu').hidden = false; };
+$('#quit').onclick = () => { running = false; if (view) view.visible = false; $('#hud').hidden = true; $('#menu').hidden = false; };
 
 function loop(ts) {
   requestAnimationFrame(loop);
