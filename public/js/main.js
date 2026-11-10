@@ -1,8 +1,63 @@
 import * as THREE from 'three';
 import { WEAPONS, LEVELS } from './config.js';
-import { explode, updateFx, clearFx, makeView, updateView } from './fx.js?v=3';
 import { THEMES, addCustom, customImgs } from './targets.js';
 
+// ===== efek ledakan + tangan/senjata =====
+const parts = [], box = new THREE.BoxGeometry(1, 1, 1), ball = new THREE.SphereGeometry(1, 10, 8);
+
+function explode(scene, t) {
+  const cols = []; t.traverse(o => { if (o.isMesh) cols.push(o.material.map ? 0xffffff : o.material.color.getHex()); });
+  if (!cols.length) cols.push(0xffffff);
+  for (let i = 0; i < 24; i++) {
+    const m = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: cols[i % cols.length], transparent: true })), z = .08 + Math.random() * .18;
+    m.scale.set(z * (.5 + Math.random()), z, z * (.5 + Math.random())); m.position.copy(t.position); scene.add(m);
+    parts.push({ m, life: .9, max: .9,
+      v: new THREE.Vector3(Math.random() - .5, Math.random() - .3, Math.random() - .5).normalize().multiplyScalar(3 + Math.random() * 6),
+      w: new THREE.Vector3(Math.random(), Math.random(), Math.random()).multiplyScalar(12) });
+  }
+  const f = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ color: 0xffc04d, transparent: true, blending: THREE.AdditiveBlending }));
+  f.position.copy(t.position); scene.add(f); parts.push({ m: f, flash: true, life: .25, max: .25, s: t.userData.r });
+}
+function updateFx(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const q = parts[i], k = (q.life -= dt) / q.max;
+    if (q.flash) { q.m.scale.setScalar(q.s * (1 + (1 - k) * 2.5)); q.m.material.opacity = Math.max(0, k * .9); }
+    else { q.v.y -= 9 * dt; q.m.position.addScaledVector(q.v, dt); q.m.rotation.x += q.w.x * dt; q.m.rotation.y += q.w.y * dt; q.m.material.opacity = Math.min(1, k * 2); }
+    if (q.life <= 0) { q.m.parent.remove(q.m); q.m.material.dispose(); parts.splice(i, 1); }
+  }
+}
+function clearFx() { while (parts.length) { const q = parts.pop(); q.m.parent && q.m.parent.remove(q.m); } }
+
+// ---- tangan + senjata (first person, model menghadap +z) ----
+const mat = c => new THREE.MeshLambertMaterial({ color: c });
+const B = (w, h, d, c, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c)); m.position.set(x, y, z); return m; };
+const C = (r, l, c, x, y, z) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, l, 8), mat(c)); m.rotation.x = Math.PI / 2; m.position.set(x, y, z); return m; };
+const hand = (x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.07, 10, 8), mat(0xf1c27d)); m.position.set(x, y, z); return m; };
+
+function makeView(type) {
+  const g = new THREE.Group(); g.add(C(.06, .9, 0x23407a, 0, -.05, -.5));
+  if (type === 'pistol') {
+    g.add(B(.055, .17, .08, 0x2b2f36, 0, -.1, -.02), B(.06, .07, .32, 0x2b2f36, 0, .04, .13), C(.015, .1, 0x888888, 0, .04, .32), hand(0, -.04, -.03));
+    const fl = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ color: 0xffe066 })); fl.scale.setScalar(.06); fl.position.set(0, .04, .42); g.add(fl); g.userData.flash = fl;
+  } else if (type === 'knife') {
+    const bl = B(.012, .07, .32, 0xdddddd, 0, 0, .26); g.add(B(.04, .04, .16, 0x5c3b1e, 0, 0, .02), bl, hand(0, 0, 0)); g.userData.proj = bl;
+  } else {
+    const bow = new THREE.Mesh(new THREE.TorusGeometry(.32, .015, 6, 18, Math.PI), mat(0x8b5a2b)); bow.rotation.set(0, -Math.PI / 2, -Math.PI / 2); bow.position.z = .1;
+    const arr = C(.012, .55, 0xc9a066, 0, 0, .3); g.add(bow, C(.004, .64, 0xeeeeee, 0, 0, .1).rotateZ(Math.PI / 2).rotateY(0) && B(.004, .64, .004, 0xeeeeee, 0, 0, .1), arr, hand(0, 0, .1)); g.userData.proj = arr;
+  }
+  g.userData.flash && (g.userData.flash.visible = false);
+  return g;
+}
+const _v = new THREE.Vector3();
+function updateView(g, ndc, cam, kick, ready) {
+  g.position.set(.32, -.3, -.65 + kick * .12);
+  const d = 12, ty = Math.tan(cam.fov * Math.PI / 360);
+  cam.updateMatrixWorld(true); g.lookAt(cam.localToWorld(_v.set(ndc.x * ty * cam.aspect * d, ndc.y * ty * d, -d)));
+  if (g.userData.flash) g.userData.flash.visible = kick > .8;
+  if (g.userData.proj) g.userData.proj.visible = ready;
+}
+
+// ===== game =====
 const $ = s => document.querySelector(s);
 const showErr = m => { const d = $('#err'); if (d) { d.hidden = false; d.textContent = '⚠ ' + m; } };
 window.addEventListener('error', e => showErr(e.message));
