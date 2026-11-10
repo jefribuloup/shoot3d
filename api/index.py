@@ -70,7 +70,7 @@ def player():
         n = nm(d.get("name"))
         if not n:
             return jsonify(error="name"), 400
-        prefs = {k: str(v)[:20] for k, v in (d.get("prefs") or {}).items() if k in ("theme", "weapon", "level")}
+        prefs = {k: str(v)[:100] for k, v in (d.get("prefs") or {}).items() if k in ("theme", "weapon", "level")}
         q("INSERT INTO players(name,prefs) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET prefs=excluded.prefs", (n, json.dumps(prefs)))
         return jsonify(ok=True)
     n = nm(request.args.get("name"))
@@ -87,7 +87,7 @@ def score():
         return jsonify(error="bad request"), 400
     q("INSERT INTO scores(name,score,hits,shots,theme,weapon,level) VALUES(?,?,?,?,?,?,?)",
       (n, num(d, "score", 100000), num(d, "hits", 1000), num(d, "shots", 5000),
-       str(d.get("theme"))[:20], str(d.get("weapon"))[:20], lv))
+       str(d.get("theme"))[:100], str(d.get("weapon"))[:20], lv))
     return jsonify(ok=True)
 
 
