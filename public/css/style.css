@@ -14,3 +14,5 @@ h1{margin:0 0 4px;font-size:clamp(26px,7vw,44px)}h3{margin:10px 0 2px;opacity:.7
 .go{margin:14px 6px 0;background:#ff4d4d;color:#fff;border:0;border-radius:12px;padding:12px 40px;font-size:20px;font-weight:700;cursor:pointer}
 .tip{opacity:.5;font-size:13px}
 @media(pointer:coarse){#cross{display:none}body{cursor:auto}}
+.name{background:#1d2c52;color:#fff;border:2px solid #5b7bd5;border-radius:10px;padding:10px 14px;font-size:16px;text-align:center;cursor:text;margin:6px 0}
+#lb{text-align:left;padding-left:28px;margin:6px 0;max-height:30vh;overflow:auto}#lb .me{color:#ffd43b;font-weight:700}
