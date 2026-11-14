@@ -115,3 +115,8 @@ h3 small,.up small{font-weight:500;opacity:.55;font-size:12px}
 .chip.lock{opacity:.5}.chip.lock::after{content:""}
 .note{margin:6px 0;padding:8px 12px;border-radius:12px;background:#51cf6622;border:1px solid #51cf6688;font-weight:700}
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 70px);transform:translateX(-50%);z-index:110;max-width:88vw;background:#111f45;border:1px solid var(--acc);color:#fff;padding:10px 16px;border-radius:12px;font-weight:600;font-size:15px;text-align:center;box-shadow:0 8px 30px #000a}
+
+.hint{min-height:18px;margin-top:4px;font-size:13px;font-weight:600}.hint.ok{color:#69db7c}.hint.bad{color:#ff8787}
+.flag{width:24px;height:18px;border-radius:3px;flex:none;object-fit:cover;box-shadow:0 0 0 1px #ffffff33}span.flag{display:inline-grid;place-items:center;font-size:14px;box-shadow:none}
+#lb li span:last-child{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lbc{margin:2px 0 0;line-height:1.4}
