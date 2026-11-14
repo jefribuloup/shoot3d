@@ -13,6 +13,20 @@
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
 </head>
 <body>
+<div id="loader" role="status" aria-live="polite">
+  <div class="lcard">
+    <div class="spin">
+      <div class="ring r1"></div><div class="ring r2"></div>
+      <div class="orbit"><i>🍎</i><i>📚</i><i>🐟</i></div>
+      <div class="core">🎯</div>
+    </div>
+    <div class="ltitle">Shoot<span>3D</span></div>
+    <div id="ltxt">Memuat game</div>
+    <div id="lbar"><i></i></div>
+    <button id="lreload" onclick="location.reload()">↻ Muat Ulang</button>
+  </div>
+</div>
+<script>setTimeout(function(){var l=document.getElementById('loader');if(l&&!window.__ready&&!l.classList.contains('fail')){l.classList.add('fail');document.getElementById('ltxt').textContent='Memuat terlalu lama. Periksa koneksi internet lalu muat ulang.'}},15000)</script>
 <canvas id="c"></canvas>
 <div id="cross"></div>
 
@@ -60,6 +74,6 @@
 </div>
 
 <div id="err" hidden></div>
-<script type="module" src="js/main.js?v=3"></script>
+<script type="module" src="js/main.js?v=4" onerror="var l=document.getElementById('loader');l.classList.add('fail');document.getElementById('ltxt').textContent='Gagal memuat file game. Periksa koneksi lalu muat ulang.'"></script>
 </body>
 </html>
