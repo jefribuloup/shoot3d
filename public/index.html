@@ -53,7 +53,7 @@
     <div id="gwrap"><div class="or"><span>atau</span></div><div id="gbtn"></div></div>
     <div class="or"><span>belum mau daftar?</span></div>
     <button id="guestBtn" class="chip" type="button">👤 Play as Guest</button>
-    <p class="tip">Guest: hanya Level Mudah, skor & progres tidak disimpan.<br>Akun: simpan skor, peringkat, dan buka level berikutnya.</p>
+    <p class="tip">Guest: boleh coba semua level, nama harus unik & skor tampil di peringkat.<br>Akun: data tersimpan permanen & bisa dipakai di perangkat lain.<br>Negara pemain (dari IP, IP tidak disimpan) tampil di peringkat.</p>
   </div>
 </div>
 
@@ -67,10 +67,10 @@
     </header>
 
     <div id="userbar"><span id="ubName"></span><button id="ubOut" class="chip" hidden>Keluar</button></div>
-    <div id="guestNote">🔒 Mode Tamu: hanya Level Mudah, skor tidak disimpan. <button id="gnIn" class="chip">Masuk / Daftar</button></div>
+    <div id="guestNote">👤 Mode Tamu: semua level boleh dicoba, skor tampil di peringkat atas nama tamu (nama harus unik). <button id="gnIn" class="chip">Masuk / Daftar</button></div>
 
     <section id="nameSec"><h3><em>1</em> Nama Pemain</h3>
-      <input id="name" class="name" maxlength="20" placeholder="Ketik namamu…" autocomplete="off"></section>
+      <input id="name" class="name" maxlength="20" placeholder="Ketik namamu…" autocomplete="off"><div id="nameHint" class="hint"></div></section>
 
     <section><h3><em>2</em> Objek Target <small>boleh pilih lebih dari satu</small></h3>
       <div id="themes" class="row"></div>
@@ -91,6 +91,7 @@
     <div class="stats"><div><small>Poin</small><b id="es"></b></div><div><small>Terbaik</small><b id="eb"></b></div></div>
     <h3>🏆 Papan Peringkat</h3>
     <ol id="lb"></ol>
+    <p id="lbc" class="tip"></p>
     <p id="endnote" class="note" hidden></p>
     <div class="btns"><button id="endcta" class="chip" hidden>🔑 Masuk / Daftar</button><button id="again" class="go">↻ Main Lagi</button><button id="home" class="chip">☰ Menu</button></div>
   </div>
@@ -98,6 +99,6 @@
 
 <div id="toast" hidden></div>
 <div id="err" hidden></div>
-<script type="module" src="js/main.js?v=5" onerror="var l=document.getElementById('loader');l.classList.add('fail');document.getElementById('ltxt').textContent='Gagal memuat file game. Periksa koneksi lalu muat ulang.'"></script>
+<script type="module" src="js/main.js?v=6" onerror="var l=document.getElementById('loader');l.classList.add('fail');document.getElementById('ltxt').textContent='Gagal memuat file game. Periksa koneksi lalu muat ulang.'"></script>
 </body>
 </html>
