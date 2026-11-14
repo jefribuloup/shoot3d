@@ -32,7 +32,7 @@ const tool = () => pick([
 
 export const customImgs = [];
 export function addCustom(url) {
-  new THREE.TextureLoader().load(url, t => { t.colorSpace = THREE.SRGBColorSpace; customImgs.push({ t, a: t.image.width / t.image.height }); });
+  return new Promise(res => new THREE.TextureLoader().load(url, t => { t.colorSpace = THREE.SRGBColorSpace; customImgs.push({ t, a: t.image.width / t.image.height }); res(); }, undefined, () => res()));
 }
 const custom = () => {
   const { t, a } = pick(customImgs);
