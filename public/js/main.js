@@ -64,7 +64,18 @@ function updateView(g, ndc, cam, kick, ready) {
 
 // ===== game =====
 const $ = s => document.querySelector(s);
-const showErr = m => { const d = $('#err'); if (d) { d.hidden = false; d.textContent = '⚠ ' + m; } };
+// ===== preloader =====
+const loader = $('#loader'), ltxt = $('#ltxt'), sleep = ms => new Promise(r => setTimeout(r, ms));
+let busyN = 1, shownAt = 0; // 1 = boot awal
+function showLoad(msg) { busyN++; loader.classList.remove('out', 'fail'); loader.hidden = false; ltxt.textContent = msg; shownAt = performance.now(); }
+async function hideLoad(min = 450) {
+  const w = min - (performance.now() - shownAt); if (w > 0) await sleep(w);
+  if (--busyN > 0) return; busyN = 0;
+  loader.classList.add('out'); await sleep(300);
+  if (!busyN) { loader.hidden = true; loader.classList.remove('out'); }
+}
+const pending = t => { const ol = $('#lb'); ol.innerHTML = ''; const li = document.createElement('li'); li.className = 'ld'; li.textContent = t; ol.append(li); };
+const showErr = m => { const d = $('#err'); if (d) { d.hidden = false; d.textContent = '⚠ ' + m; } if (!window.__ready) { loader.classList.add('fail'); ltxt.textContent = 'Terjadi kesalahan: ' + m; } };
 window.addEventListener('error', e => showErr(e.message));
 window.addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 const sel = { theme: 'buah', weapon: 'pistol', level: 'easy' };
@@ -96,9 +107,16 @@ function themeChips() {
 }
 const drawMenu = () => { themeChips(); chips($('#weapons'), WEAPONS, 'weapon'); chips($('#levels'), LEVELS, 'level'); };
 drawMenu();
-$('#file').onchange = e => { [...e.target.files].forEach(f => addCustom(URL.createObjectURL(f))); sel.theme = [...new Set([...getThemes(), 'custom'])].join(','); drawMenu(); };
+$('#file').onchange = async e => {
+  const files = [...e.target.files]; if (!files.length) return;
+  showLoad('Memuat gambar');
+  await Promise.all(files.map(f => addCustom(URL.createObjectURL(f))));
+  sel.theme = [...new Set([...getThemes(), 'custom'])].join(','); drawMenu(); e.target.value = '';
+  await hideLoad(400);
+};
 
 // ---- scene ----
+ltxt.textContent = 'Menyiapkan mesin 3D'; await sleep(50);
 const coarse = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
 const low = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 4) <= 2;
 let maxPr = low ? 1 : coarse ? 1.5 : Math.min(devicePixelRatio, 2), pr = maxPr;
@@ -128,7 +146,13 @@ scene.add(cam);
 let hudS = '', tracerT = 0, accT = 0, accN = 0, good = 0;
 const setPr = v => { pr = v; qty = pr < .9 ? 12 : 24; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight, false); };
 const setView = () => { if (view) cam.remove(view); view = makeView(sel.weapon); view.visible = false; cam.add(view); };
-async function api(url, body) { try { const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined); return r.ok ? await r.json() : null; } catch { return null; } }
+async function api(url, body) {
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const r = await fetch(url, { ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: ctl.signal });
+    return r.ok ? await r.json() : null;
+  } catch { return null; } finally { clearTimeout(tm); }
+}
 async function loadMe() {
   player = ($('#name').value.trim() || 'Pemain').slice(0, 20); try { localStorage.setItem('shoot3d-name', player); } catch {}
   const me = await api('/api/player?name=' + encodeURIComponent(player)); if (!me) return;
@@ -137,11 +161,14 @@ async function loadMe() {
     for (const [k, D] of [['weapon', WEAPONS], ['level', LEVELS]]) if (me.prefs[k] in D) sel[k] = me.prefs[k]; drawMenu(); }
 }
 async function board() {
+  pending('Memuat peringkat');
   const r = await api('/api/leaderboard?level=' + sel.level), ol = $('#lb'); ol.innerHTML = '';
   (r?.rows || []).forEach((x, i) => { const li = document.createElement('li'); li.textContent = `${x.name} — ${x.score}`; if (x.name === player) li.className = 'me'; ol.append(li); });
+  if (!ol.children.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = r ? 'Belum ada skor' : 'Peringkat tidak tersedia'; ol.append(li); }
 }
 try { $('#name').value = localStorage.getItem('shoot3d-name') || ''; } catch {}
-$('#name').onchange = loadMe; loadMe();
+$('#name').onchange = loadMe;
+const mePromise = loadMe();
 
 function beep(f) {
   try { ac = ac || new AudioContext(); const o = ac.createOscillator(), g = ac.createGain();
@@ -204,13 +231,19 @@ $('#c').addEventListener('pointerdown', e => { aim(e); if (running) fire(); });
 
 function clearScene() { for (const a of [targets, projs, fx]) { for (const o of a) scene.remove(o.m || o); a.length = 0; } }
 
-function start() {
+let starting = false;
+async function start() {
+  if (starting) return; starting = true; showLoad('Menyiapkan objek & senjata');
+  await sleep(80);
+  try {
   activeThemes = getThemes().filter(k => k !== 'custom' || customImgs.length); if (!activeThemes.length) activeThemes = ['campur'];
   activeThemes.forEach(k => makeTarget(k));
   try { ac = ac || new AudioContext(); ac.resume(); } catch {}
-  clearScene(); clearFx(); try { setView(); } catch (e) { console.error(e); view = null; } hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
+  clearScene(); clearFx(); try { setView(); } catch (e) { console.error(e); view = null; } hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time;
   player = ($('#name').value.trim() || 'Pemain').slice(0, 20); api('/api/player', { name: player, prefs: sel });
   if (view) view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
+  } catch (e) { showErr(e.message); }
+  await hideLoad(550); running = true; starting = false;
 }
 async function end() {
   running = false; if (view) view.visible = false; $('#hud').hidden = true;
@@ -218,6 +251,7 @@ async function end() {
   serverBest[sel.level] = b;
   $('#endt').textContent = score >= LEVELS[sel.level].goal ? '🏆 Menang!' : '💥 Waktu Habis';
   $('#es').textContent = score; $('#eb').textContent = b; $('#end').hidden = false;
+  pending('Menyimpan skor');
   await api('/api/score', { name: player, score, hits, shots, theme: sel.theme, weapon: sel.weapon, level: sel.level });
   board();
 }
@@ -261,7 +295,10 @@ function loop(ts) {
       if (fps < 40 && pr > .5) { good = 0; setPr(pr - .25); } else if (fps > 56 && pr < maxPr && ++good >= 3) { good = 0; setPr(pr + .25); } }
   }
 }
+ltxt.textContent = 'Menyiapkan efek & senjata'; await sleep(50);
 initFx(scene);
 try { setView(); view.visible = true; tracer.visible = true; [...pool, ...flashPool].forEach(m => { m.visible = true; }); renderer.compile(scene, cam); } catch (e) { console.warn(e); }
 if (view) view.visible = false; tracer.visible = false; [...pool, ...flashPool].forEach(m => { m.visible = false; });
 requestAnimationFrame(loop);
+ltxt.textContent = 'Menyambung ke server'; await Promise.race([mePromise, sleep(2500)]);
+window.__ready = true; await hideLoad(700);
