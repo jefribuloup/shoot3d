@@ -96,3 +96,22 @@ h3 small,.up small{font-weight:500;opacity:.55;font-size:12px}
 #lb li.ld::before{content:"";background:none;border:3px solid #ffffff33;border-top-color:var(--acc);animation:spin .8s linear infinite}
 #lb li.empty::before{display:none}#lb li.empty{justify-content:center;opacity:.6}
 @media (prefers-reduced-motion:reduce){.ring,.orbit,.core,#lbar i{animation-duration:5s}}
+
+/* auth, akun, level terkunci */
+[hidden]{display:none!important}
+.tabs{display:flex;gap:6px;margin:10px auto 8px;background:#ffffff12;padding:4px;border-radius:14px;max-width:320px}
+.tabs button{flex:1;font:inherit;font-weight:700;font-size:16px;color:#cfd9ff;background:none;border:0;border-radius:10px;padding:6px;cursor:pointer}
+.tabs button.on{background:var(--acc);color:#222}
+.field{display:block;margin:8px auto}
+#aMsg{min-height:20px;margin:4px 0 0;color:#ff8787;font-size:14px;font-weight:600}
+#authForm .go{width:100%;max-width:320px;margin-top:6px}
+.or{display:flex;align-items:center;gap:10px;margin:14px auto 10px;max-width:320px;opacity:.55;font-size:13px}
+.or::before,.or::after{content:"";flex:1;height:1px;background:#ffffff44}
+#gbtn{display:flex;justify-content:center;min-height:44px}
+#userbar{display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 0;font-weight:700;font-size:17px}
+#userbar .chip{padding:2px 12px;font-size:14px}
+#guestNote{margin:8px auto 0;max-width:460px;padding:8px 12px;border-radius:12px;background:#ffd43b1c;border:1px solid #ffd43b66;font-size:14px;font-weight:600}
+#guestNote .chip{padding:2px 12px;font-size:14px;margin-left:6px;white-space:nowrap}
+.chip.lock{opacity:.5}.chip.lock::after{content:""}
+.note{margin:6px 0;padding:8px 12px;border-radius:12px;background:#51cf6622;border:1px solid #51cf6688;font-weight:700}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 70px);transform:translateX(-50%);z-index:110;max-width:88vw;background:#111f45;border:1px solid var(--acc);color:#fff;padding:10px 16px;border-radius:12px;font-weight:600;font-size:15px;text-align:center;box-shadow:0 8px 30px #000a}
