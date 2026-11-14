@@ -38,7 +38,26 @@
   <button id="quit" title="Keluar ke menu">✕</button>
 </div>
 
-<div id="menu" class="panel">
+<div id="auth" class="panel" hidden>
+  <div class="bg" aria-hidden="true"><i>🎯</i><i>🔑</i><i>🐟</i><i>🍎</i></div>
+  <div class="card small">
+    <div class="logo">🎯</div><h1>Shoot<span>3D</span></h1>
+    <div class="tabs"><button id="tabIn" class="on" type="button">Masuk</button><button id="tabUp" type="button">Daftar</button></div>
+    <form id="authForm" novalidate>
+      <input id="aName" class="name field" maxlength="20" placeholder="Nama tampilan" autocomplete="nickname" hidden>
+      <input id="aEmail" class="name field" type="email" placeholder="Email" autocomplete="email">
+      <input id="aPass" class="name field" type="password" placeholder="Kata sandi (min. 6 karakter)" autocomplete="current-password">
+      <div id="aMsg" role="alert"></div>
+      <button id="aSubmit" class="go" type="submit">Masuk</button>
+    </form>
+    <div id="gwrap"><div class="or"><span>atau</span></div><div id="gbtn"></div></div>
+    <div class="or"><span>belum mau daftar?</span></div>
+    <button id="guestBtn" class="chip" type="button">👤 Play as Guest</button>
+    <p class="tip">Guest: hanya Level Mudah, skor & progres tidak disimpan.<br>Akun: simpan skor, peringkat, dan buka level berikutnya.</p>
+  </div>
+</div>
+
+<div id="menu" class="panel" hidden>
   <div class="bg" aria-hidden="true"><i>🍎</i><i>📚</i><i>🐟</i><i>🔨</i><i>🥕</i><i>🖊️</i></div>
   <div class="card">
     <header>
@@ -47,7 +66,10 @@
       <p class="sub">Tembak objek melayang, kejar combo, dan jadi nomor satu!</p>
     </header>
 
-    <section><h3><em>1</em> Nama Pemain</h3>
+    <div id="userbar"><span id="ubName"></span><button id="ubOut" class="chip" hidden>Keluar</button></div>
+    <div id="guestNote">🔒 Mode Tamu: hanya Level Mudah, skor tidak disimpan. <button id="gnIn" class="chip">Masuk / Daftar</button></div>
+
+    <section id="nameSec"><h3><em>1</em> Nama Pemain</h3>
       <input id="name" class="name" maxlength="20" placeholder="Ketik namamu…" autocomplete="off"></section>
 
     <section><h3><em>2</em> Objek Target <small>boleh pilih lebih dari satu</small></h3>
@@ -69,11 +91,13 @@
     <div class="stats"><div><small>Poin</small><b id="es"></b></div><div><small>Terbaik</small><b id="eb"></b></div></div>
     <h3>🏆 Papan Peringkat</h3>
     <ol id="lb"></ol>
-    <div class="btns"><button id="again" class="go">↻ Main Lagi</button><button id="home" class="chip">☰ Menu</button></div>
+    <p id="endnote" class="note" hidden></p>
+    <div class="btns"><button id="endcta" class="chip" hidden>🔑 Masuk / Daftar</button><button id="again" class="go">↻ Main Lagi</button><button id="home" class="chip">☰ Menu</button></div>
   </div>
 </div>
 
+<div id="toast" hidden></div>
 <div id="err" hidden></div>
-<script type="module" src="js/main.js?v=4" onerror="var l=document.getElementById('loader');l.classList.add('fail');document.getElementById('ltxt').textContent='Gagal memuat file game. Periksa koneksi lalu muat ulang.'"></script>
+<script type="module" src="js/main.js?v=5" onerror="var l=document.getElementById('loader');l.classList.add('fail');document.getElementById('ltxt').textContent='Gagal memuat file game. Periksa koneksi lalu muat ulang.'"></script>
 </body>
 </html>
