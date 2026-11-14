@@ -79,6 +79,11 @@ const showErr = m => { const d = $('#err'); if (d) { d.hidden = false; d.textCon
 window.addEventListener('error', e => showErr(e.message));
 window.addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 const sel = { theme: 'buah', weapon: 'pistol', level: 'easy' };
+const auth = { user: null, unlocked: ['easy'], cfg: null };
+const ORDER = Object.keys(LEVELS);
+const allowed = k => auth.user ? auth.unlocked.includes(k) : k === ORDER[0];
+let toastT;
+function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); }
 
 function chips(box, data, key) {
   box.innerHTML = '';
@@ -105,7 +110,27 @@ function themeChips() {
     box.append(b);
   }
 }
-const drawMenu = () => { themeChips(); chips($('#weapons'), WEAPONS, 'weapon'); chips($('#levels'), LEVELS, 'level'); };
+function levelChips() {
+  const box = $('#levels'); box.innerHTML = '';
+  if (!allowed(sel.level)) sel.level = ORDER[0];
+  for (const k of ORDER) {
+    const b = document.createElement('button'), lock = !allowed(k), i = ORDER.indexOf(k);
+    b.className = 'chip' + (sel.level === k ? ' on' : '') + (lock ? ' lock' : '');
+    b.textContent = (lock ? '🔒 ' : '') + LEVELS[k].name;
+    b.onclick = () => {
+      if (lock) return toast(auth.user ? `Capai ${LEVELS[ORDER[i - 1]].goal} poin di Level ${LEVELS[ORDER[i - 1]].name} untuk membuka` : 'Masuk atau daftar untuk membuka level ini');
+      sel.level = k; [...box.children].forEach(c => c.classList.remove('on')); b.classList.add('on');
+    };
+    box.append(b);
+  }
+}
+function renderUser() {
+  const u = auth.user;
+  $('#nameSec').hidden = !!u; $('#guestNote').hidden = !!u; $('#ubOut').hidden = !u;
+  $('#ubName').textContent = u ? '👤 ' + u.name : '';
+  $('#userbar').hidden = !u;
+}
+const drawMenu = () => { themeChips(); chips($('#weapons'), WEAPONS, 'weapon'); levelChips(); renderUser(); };
 drawMenu();
 $('#file').onchange = async e => {
   const files = [...e.target.files]; if (!files.length) return;
@@ -141,34 +166,40 @@ let running = false, hits = 0, shots = 0, shake = 0, kick = 0, view, player = 'P
 const targets = [], projs = [], fx = [];
 const ndc = new THREE.Vector2(), ray = new THREE.Raycaster();
 const bestKey = () => 'shoot3d-best-' + sel.level;
-const best = () => { let l = 0; try { l = +localStorage.getItem(bestKey()) || 0; } catch {} return Math.max(l, serverBest[sel.level] || 0); };
+const best = () => { if (auth.user) return serverBest[sel.level] || 0; let l = 0; try { l = +localStorage.getItem(bestKey()) || 0; } catch {} return l; };
 scene.add(cam);
 let hudS = '', tracerT = 0, accT = 0, accN = 0, good = 0;
 const setPr = v => { pr = v; qty = pr < .9 ? 12 : 24; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight, false); };
 const setView = () => { if (view) cam.remove(view); view = makeView(sel.weapon); view.visible = false; cam.add(view); };
-async function api(url, body) {
+async function apix(url, body) {
   const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
   try {
-    const r = await fetch(url, { ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: ctl.signal });
-    return r.ok ? await r.json() : null;
-  } catch { return null; } finally { clearTimeout(tm); }
+    const r = await fetch(url, { ...(body !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}), signal: ctl.signal });
+    let data = null; try { data = await r.json(); } catch {}
+    return { ok: r.ok, status: r.status, data };
+  } catch { return { ok: false, status: 0, data: null }; } finally { clearTimeout(tm); }
 }
+async function api(url, body) { const r = await apix(url, body); return r.ok ? r.data : null; }
+async function loadCfg() { auth.cfg = await api('/api/config'); }
 async function loadMe() {
-  player = ($('#name').value.trim() || 'Pemain').slice(0, 20); try { localStorage.setItem('shoot3d-name', player); } catch {}
-  const me = await api('/api/player?name=' + encodeURIComponent(player)); if (!me) return;
-  serverBest = me.best || {};
-  if (me.prefs) { const ts = String(me.prefs.theme || '').split(',').filter(k => THEMES[k] && k !== 'custom'); if (ts.length) sel.theme = ts.join(',');
-    for (const [k, D] of [['weapon', WEAPONS], ['level', LEVELS]]) if (me.prefs[k] in D) sel[k] = me.prefs[k]; drawMenu(); }
+  const me = await api('/api/me'); if (!me) return;
+  auth.user = me.user || null; auth.unlocked = me.unlocked || [ORDER[0]]; serverBest = me.best || {};
+  if (auth.user) {
+    const p = auth.user.prefs || {};
+    const ts = String(p.theme || '').split(',').filter(k => THEMES[k] && k !== 'custom'); if (ts.length) sel.theme = ts.join(',');
+    if (p.weapon in WEAPONS) sel.weapon = p.weapon; if (p.level in LEVELS && allowed(p.level)) sel.level = p.level;
+  }
+  drawMenu();
 }
 async function board() {
   pending('Memuat peringkat');
   const r = await api('/api/leaderboard?level=' + sel.level), ol = $('#lb'); ol.innerHTML = '';
-  (r?.rows || []).forEach((x, i) => { const li = document.createElement('li'); li.textContent = `${x.name} — ${x.score}`; if (x.name === player) li.className = 'me'; ol.append(li); });
+  (r?.rows || []).forEach((x, i) => { const li = document.createElement('li'); li.textContent = `${x.name} — ${x.score}`; if (auth.user && x.name === auth.user.name) li.className = 'me'; ol.append(li); });
   if (!ol.children.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = r ? 'Belum ada skor' : 'Peringkat tidak tersedia'; ol.append(li); }
 }
 try { $('#name').value = localStorage.getItem('shoot3d-name') || ''; } catch {}
-$('#name').onchange = loadMe;
-const mePromise = loadMe();
+$('#name').onchange = () => { try { localStorage.setItem('shoot3d-name', $('#name').value.trim()); } catch {} };
+const mePromise = Promise.all([loadCfg(), loadMe()]);
 
 function beep(f) {
   try { ac = ac || new AudioContext(); const o = ac.createOscillator(), g = ac.createGain();
@@ -233,26 +264,42 @@ function clearScene() { for (const a of [targets, projs, fx]) { for (const o of 
 
 let starting = false;
 async function start() {
-  if (starting) return; starting = true; showLoad('Menyiapkan objek & senjata');
+  if (starting) return; starting = true; showLoad('Menyiapkan objek & senjata'); if (!allowed(sel.level)) sel.level = ORDER[0];
   await sleep(80);
   try {
   activeThemes = getThemes().filter(k => k !== 'custom' || customImgs.length); if (!activeThemes.length) activeThemes = ['campur'];
   activeThemes.forEach(k => makeTarget(k));
   try { ac = ac || new AudioContext(); ac.resume(); } catch {}
   clearScene(); clearFx(); try { setView(); } catch (e) { console.error(e); view = null; } hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time;
-  player = ($('#name').value.trim() || 'Pemain').slice(0, 20); api('/api/player', { name: player, prefs: sel });
+  player = auth.user ? auth.user.name : ($('#name').value.trim() || 'Tamu').slice(0, 20);
+  if (auth.user) api('/api/prefs', { prefs: sel });
   if (view) view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
   } catch (e) { showErr(e.message); }
   await hideLoad(550); running = true; starting = false;
 }
 async function end() {
   running = false; if (view) view.visible = false; $('#hud').hidden = true;
-  const b = Math.max(best(), score); try { localStorage.setItem(bestKey(), b); } catch {}
+  const b = Math.max(best(), score); if (!auth.user) try { localStorage.setItem(bestKey(), b); } catch {}
   serverBest[sel.level] = b;
   $('#endt').textContent = score >= LEVELS[sel.level].goal ? '🏆 Menang!' : '💥 Waktu Habis';
   $('#es').textContent = score; $('#eb').textContent = b; $('#end').hidden = false;
-  pending('Menyimpan skor');
-  await api('/api/score', { name: player, score, hits, shots, theme: sel.theme, weapon: sel.weapon, level: sel.level });
+  const won = score >= LEVELS[sel.level].goal, note = $('#endnote'), i = ORDER.indexOf(sel.level);
+  note.hidden = true; $('#endcta').hidden = true;
+  if (auth.user) {
+    pending('Menyimpan skor');
+    const r = await api('/api/score', { score, hits, shots, theme: sel.theme, weapon: sel.weapon, level: sel.level });
+    if (r) {
+      const before = auth.unlocked; auth.unlocked = r.unlocked || before;
+      const fresh = auth.unlocked.filter(k => !before.includes(k));
+      if (fresh.length) note.textContent = '🔓 Level ' + fresh.map(k => LEVELS[k].name).join(', ') + ' terbuka!';
+      else if (!won && ORDER[i + 1] && !auth.unlocked.includes(ORDER[i + 1])) note.textContent = `Capai ${LEVELS[sel.level].goal} poin untuk membuka Level ${LEVELS[ORDER[i + 1]].name}`;
+      else note.textContent = '✅ Skor tersimpan';
+      drawMenu();
+    } else note.textContent = '⚠ Skor gagal disimpan (periksa koneksi)';
+    note.hidden = false;
+  } else {
+    note.textContent = '👤 Mode Tamu: skor tidak disimpan & hanya Level Mudah.'; note.hidden = false; $('#endcta').hidden = false;
+  }
   board();
 }
 $('#start').onclick = $('#again').onclick = start;
@@ -295,10 +342,52 @@ function loop(ts) {
       if (fps < 40 && pr > .5) { good = 0; setPr(pr - .25); } else if (fps > 56 && pr < maxPr && ++good >= 3) { good = 0; setPr(pr + .25); } }
   }
 }
+// ===== autentikasi =====
+let amode = 'in';
+const guestSess = () => { try { return sessionStorage.getItem('s3d-guest') === '1'; } catch { return false; } };
+const setGuestSess = v => { try { v ? sessionStorage.setItem('s3d-guest', '1') : sessionStorage.removeItem('s3d-guest'); } catch {} };
+function setMode(m) {
+  amode = m; $('#tabIn').classList.toggle('on', m === 'in'); $('#tabUp').classList.toggle('on', m === 'up');
+  $('#aName').hidden = m === 'in'; $('#aSubmit').textContent = m === 'in' ? 'Masuk' : 'Daftar'; $('#aMsg').textContent = '';
+  $('#aPass').autocomplete = m === 'in' ? 'current-password' : 'new-password';
+}
+const showAuth = () => { $('#menu').hidden = $('#end').hidden = true; $('#auth').hidden = false; };
+const showMenu = () => { $('#auth').hidden = true; $('#menu').hidden = false; drawMenu(); };
+const route = () => { (auth.user || guestSess()) ? showMenu() : showAuth(); };
+async function afterLogin() { setGuestSess(false); await loadMe(); showMenu(); await hideLoad(500); }
+$('#tabIn').onclick = () => setMode('in'); $('#tabUp').onclick = () => setMode('up');
+$('#authForm').onsubmit = async e => {
+  e.preventDefault(); const msg = $('#aMsg'); msg.textContent = '';
+  const em = $('#aEmail').value.trim(), pw = $('#aPass').value;
+  if (!em || !pw || (amode === 'up' && $('#aName').value.trim().length < 2)) { msg.textContent = amode === 'up' ? 'Lengkapi nama, email, dan kata sandi' : 'Isi email dan kata sandi'; return; }
+  showLoad(amode === 'in' ? 'Sedang masuk' : 'Membuat akun');
+  const r = await apix(amode === 'in' ? '/api/login' : '/api/register', { name: $('#aName').value, email: em, password: pw });
+  if (!r.ok) { msg.textContent = r.data?.error || 'Gagal terhubung ke server'; await hideLoad(300); return; }
+  $('#aPass').value = ''; await afterLogin();
+};
+$('#guestBtn').onclick = () => { setGuestSess(true); showMenu(); };
+$('#gnIn').onclick = $('#endcta').onclick = showAuth;
+$('#ubOut').onclick = async () => {
+  showLoad('Keluar'); await api('/api/logout', {});
+  auth.user = null; auth.unlocked = [ORDER[0]]; serverBest = {}; setGuestSess(false); setMode('in'); showAuth(); await hideLoad(400);
+};
+async function initGoogle() {
+  const id = auth.cfg?.googleClientId; if (!id) { $('#gwrap').hidden = true; return; }
+  try {
+    await new Promise((res, rej) => { const el = document.createElement('script'); el.src = 'https://accounts.google.com/gsi/client'; el.async = true; el.onload = res; el.onerror = rej; document.head.append(el); });
+    google.accounts.id.initialize({ client_id: id, callback: async resp => {
+      showLoad('Masuk dengan Google');
+      const r = await apix('/api/auth/google', { credential: resp.credential });
+      if (!r.ok) { $('#aMsg').textContent = r.data?.error || 'Login Google gagal'; await hideLoad(300); return; }
+      await afterLogin(); } });
+    google.accounts.id.renderButton($('#gbtn'), { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'continue_with', width: 280 });
+  } catch { $('#gwrap').hidden = true; }
+}
+
 ltxt.textContent = 'Menyiapkan efek & senjata'; await sleep(50);
 initFx(scene);
 try { setView(); view.visible = true; tracer.visible = true; [...pool, ...flashPool].forEach(m => { m.visible = true; }); renderer.compile(scene, cam); } catch (e) { console.warn(e); }
 if (view) view.visible = false; tracer.visible = false; [...pool, ...flashPool].forEach(m => { m.visible = false; });
 requestAnimationFrame(loop);
 ltxt.textContent = 'Menyambung ke server'; await Promise.race([mePromise, sleep(2500)]);
-window.__ready = true; await hideLoad(700);
+route(); window.__ready = true; await hideLoad(700); initGoogle();
