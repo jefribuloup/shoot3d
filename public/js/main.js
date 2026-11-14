@@ -3,30 +3,35 @@ import { WEAPONS, LEVELS } from './config.js';
 import { THEMES, addCustom, customImgs } from './targets.js';
 
 // ===== efek ledakan + tangan/senjata =====
-const parts = [], box = new THREE.BoxGeometry(1, 1, 1), ball = new THREE.SphereGeometry(1, 10, 8);
-
+const parts = [], box = new THREE.BoxGeometry(1, 1, 1), ball = new THREE.SphereGeometry(1, 8, 6);
+let pool = [], flashPool = [], qty = 24;
+function initFx(scene) {
+  for (let i = 0; i < 96; i++) { const m = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true })); m.visible = false; scene.add(m); pool.push(m); }
+  for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ color: 0xffc04d, transparent: true, blending: THREE.AdditiveBlending })); m.visible = false; scene.add(m); flashPool.push(m); }
+}
+const take = a => { for (const m of a) if (!m.visible) { m.visible = true; return m; } return null; };
 function explode(scene, t) {
   const cols = []; t.traverse(o => { if (o.isMesh) cols.push(o.material.map ? 0xffffff : o.material.color.getHex()); });
   if (!cols.length) cols.push(0xffffff);
-  for (let i = 0; i < 24; i++) {
-    const m = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: cols[i % cols.length], transparent: true })), z = .08 + Math.random() * .18;
-    m.scale.set(z * (.5 + Math.random()), z, z * (.5 + Math.random())); m.position.copy(t.position); scene.add(m);
+  for (let i = 0; i < qty; i++) {
+    const m = take(pool); if (!m) break; const z = .08 + Math.random() * .18;
+    m.material.color.setHex(cols[i % cols.length]); m.material.opacity = 1; m.rotation.set(0, 0, 0); m.position.copy(t.position);
+    m.scale.set(z * (.5 + Math.random()), z, z * (.5 + Math.random()));
     parts.push({ m, life: .9, max: .9,
       v: new THREE.Vector3(Math.random() - .5, Math.random() - .3, Math.random() - .5).normalize().multiplyScalar(3 + Math.random() * 6),
       w: new THREE.Vector3(Math.random(), Math.random(), Math.random()).multiplyScalar(12) });
   }
-  const f = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ color: 0xffc04d, transparent: true, blending: THREE.AdditiveBlending }));
-  f.position.copy(t.position); scene.add(f); parts.push({ m: f, flash: true, life: .25, max: .25, s: t.userData.r });
+  const f = take(flashPool); if (f) { f.position.copy(t.position); f.material.opacity = .9; parts.push({ m: f, flash: true, life: .25, max: .25, s: t.userData.r }); }
 }
 function updateFx(dt) {
   for (let i = parts.length - 1; i >= 0; i--) {
     const q = parts[i], k = (q.life -= dt) / q.max;
     if (q.flash) { q.m.scale.setScalar(q.s * (1 + (1 - k) * 2.5)); q.m.material.opacity = Math.max(0, k * .9); }
     else { q.v.y -= 9 * dt; q.m.position.addScaledVector(q.v, dt); q.m.rotation.x += q.w.x * dt; q.m.rotation.y += q.w.y * dt; q.m.material.opacity = Math.min(1, k * 2); }
-    if (q.life <= 0) { q.m.parent.remove(q.m); q.m.material.dispose(); parts.splice(i, 1); }
+    if (q.life <= 0) { q.m.visible = false; parts.splice(i, 1); }
   }
 }
-function clearFx() { while (parts.length) { const q = parts.pop(); q.m.parent && q.m.parent.remove(q.m); } }
+function clearFx() { while (parts.length) parts.pop().m.visible = false; }
 
 // ---- tangan + senjata (first person, model menghadap +z) ----
 const mat = c => new THREE.MeshLambertMaterial({ color: c });
@@ -50,7 +55,7 @@ function makeView(type) {
 }
 const _v = new THREE.Vector3();
 function updateView(g, ndc, cam, kick, ready) {
-  g.position.set(.32, -.3, -.65 + kick * .12);
+  const dd = .8, hh = Math.tan(cam.fov * Math.PI / 360) * dd; g.position.set(.45 * hh * cam.aspect, -.52 * hh, -dd + kick * .12);
   const d = 12, ty = Math.tan(cam.fov * Math.PI / 360);
   cam.updateMatrixWorld(true); g.lookAt(cam.localToWorld(_v.set(ndc.x * ty * cam.aspect * d, ndc.y * ty * d, -d)));
   if (g.userData.flash) g.userData.flash.visible = kick > .8;
@@ -94,8 +99,12 @@ drawMenu();
 $('#file').onchange = e => { [...e.target.files].forEach(f => addCustom(URL.createObjectURL(f))); sel.theme = [...new Set([...getThemes(), 'custom'])].join(','); drawMenu(); };
 
 // ---- scene ----
-const renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const coarse = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+const low = (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 4) <= 2;
+let maxPr = low ? 1 : coarse ? 1.5 : Math.min(devicePixelRatio, 2), pr = maxPr;
+qty = low ? 14 : 24;
+const renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: devicePixelRatio < 2 && !low });
+renderer.setPixelRatio(pr);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1630);
 scene.fog = new THREE.Fog(0x0b1630, 15, 48);
@@ -115,6 +124,8 @@ const ndc = new THREE.Vector2(), ray = new THREE.Raycaster();
 const bestKey = () => 'shoot3d-best-' + sel.level;
 const best = () => { let l = 0; try { l = +localStorage.getItem(bestKey()) || 0; } catch {} return Math.max(l, serverBest[sel.level] || 0); };
 scene.add(cam);
+let hudS = '', tracerT = 0, accT = 0, accN = 0, good = 0;
+const setPr = v => { pr = v; qty = pr < .9 ? 12 : 24; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight, false); };
 const setView = () => { if (view) cam.remove(view); view = makeView(sel.weapon); view.visible = false; cam.add(view); };
 async function api(url, body) { try { const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined); return r.ok ? await r.json() : null; } catch { return null; } }
 async function loadMe() {
@@ -137,9 +148,15 @@ function beep(f) {
     o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + .12); } catch {}
 }
 
+const protos = {};
+function makeTarget(k) {
+  const id = k === 'custom' ? 'custom' + customImgs.length : k;
+  const a = protos[id] || (protos[id] = Array.from({ length: k === 'custom' ? Math.max(3, customImgs.length * 3) : 10 }, () => THEMES[k].build()));
+  return a[Math.random() * a.length | 0].clone();
+}
 function spawn() {
-  const L = LEVELS[sel.level], th = THEMES[activeThemes[Math.random() * activeThemes.length | 0]];
-  const g = th.build(); g.scale.setScalar(L.size);
+  const L = LEVELS[sel.level], key = activeThemes[Math.random() * activeThemes.length | 0], th = THEMES[key];
+  const g = makeTarget(key); g.scale.setScalar(L.size);
   const z = -(10 + Math.random() * 12), hh = Math.tan(cam.fov * Math.PI / 360) * -z, hw = hh * cam.aspect + 2, dir = Math.random() < .5 ? 1 : -1;
   g.position.set(-dir * hw, (Math.random() - .5) * hh * 1.3, z);
   Object.assign(g.userData, { vx: dir * L.speed * (.6 + Math.random() * .8), by: g.position.y, amp: Math.random() * 2, f: 1 + Math.random() * 2, age: 0, hw,
@@ -158,6 +175,9 @@ const arrow = () => { const g = new THREE.Group(); const s = new THREE.Mesh(new 
   s.rotation.x = Math.PI / 2; const t = new THREE.Mesh(new THREE.ConeGeometry(.07, .22, 6), new THREE.MeshBasicMaterial({ color: 0xcccccc }));
   t.rotation.x = Math.PI / 2; t.position.z = .65; g.add(s, t); return g; };
 
+const tracerGeo = new THREE.BufferGeometry(); tracerGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+const tracer = new THREE.Line(tracerGeo, new THREE.LineBasicMaterial({ color: 0xffe066 })); tracer.visible = false; tracer.frustumCulled = false; scene.add(tracer);
+let knifeT, arrowT;
 function fire() {
   const now = performance.now() / 1000, W = WEAPONS[sel.weapon];
   if (now - last < W.cd) return; last = now; shots++; kick = 1; beep(W.f);
@@ -166,11 +186,10 @@ function fire() {
   if (!W.speed) {
     const h = ray.intersectObjects(targets.filter(t => !t.userData.dead), true)[0];
     const end = h ? h.point : o.clone().addScaledVector(d, 40);
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([o, end]), new THREE.LineBasicMaterial({ color: 0xffe066 }));
-    scene.add(line); fx.push({ m: line, life: .07 });
+    const pa = tracerGeo.attributes.position; pa.setXYZ(0, o.x, o.y, o.z); pa.setXYZ(1, end.x, end.y, end.z); pa.needsUpdate = true; tracer.visible = true; tracerT = .07;
     if (h) { let t = h.object; while (t.parent !== scene) t = t.parent; hit(t); } else combo = 0;
   } else {
-    const m = W.shape === 'knife' ? knife() : arrow(); m.position.copy(o); m.lookAt(o.clone().add(d)); scene.add(m);
+    const m = (W.shape === 'knife' ? (knifeT = knifeT || knife()) : (arrowT = arrowT || arrow())).clone(); m.position.copy(o); m.lookAt(o.clone().add(d)); scene.add(m);
     projs.push({ m, d, v: W.speed, r: W.r, life: 2 });
   }
 }
@@ -179,13 +198,15 @@ function aim(e) {
   $('#cross').style.transform = `translate(${e.clientX}px,${e.clientY}px)`;
   cam.rotation.set(ndc.y * .06, -ndc.x * .12, 0);
 }
-addEventListener('pointermove', aim);
+addEventListener('pointermove', aim, { passive: true });
 $('#c').addEventListener('pointerdown', e => { aim(e); if (running) fire(); });
 
 function clearScene() { for (const a of [targets, projs, fx]) { for (const o of a) scene.remove(o.m || o); a.length = 0; } }
 
 function start() {
   activeThemes = getThemes().filter(k => k !== 'custom' || customImgs.length); if (!activeThemes.length) activeThemes = ['campur'];
+  activeThemes.forEach(k => makeTarget(k));
+  try { ac = ac || new AudioContext(); ac.resume(); } catch {}
   clearScene(); clearFx(); try { setView(); } catch (e) { console.error(e); view = null; } hits = 0; shots = 0; score = 0; combo = 0; spawnT = 0; timeLeft = LEVELS[sel.level].time; running = true;
   player = ($('#name').value.trim() || 'Pemain').slice(0, 20); api('/api/player', { name: player, prefs: sel });
   if (view) view.visible = true; $('#menu').hidden = $('#end').hidden = true; $('#hud').hidden = false; $('#bs').textContent = best();
@@ -204,14 +225,18 @@ $('#home').onclick = () => { $('#end').hidden = true; $('#menu').hidden = false;
 $('#quit').onclick = () => { running = false; if (view) view.visible = false; $('#hud').hidden = true; $('#menu').hidden = false; };
 
 function loop(ts) {
-  requestAnimationFrame(loop);
-  const dt = Math.min((ts - (loop.p || ts)) / 1000, .05); loop.p = ts;
+  initFx(scene);
+try { setView(); view.visible = true; tracer.visible = true; [...pool, ...flashPool].forEach(m => { m.visible = true; }); renderer.compile(scene, cam); } catch (e) { console.warn(e); }
+if (view) view.visible = false; tracer.visible = false; [...pool, ...flashPool].forEach(m => { m.visible = false; });
+requestAnimationFrame(loop);
+  const raw = (ts - (loop.p || ts)) / 1000, dt = Math.min(raw, .05); loop.p = ts;
   const L = LEVELS[sel.level];
   if (running) {
     timeLeft -= dt; spawnT -= dt;
-    if (spawnT <= 0) { spawn(); spawnT = L.spawn * (.7 + Math.random() * .6); }
+    if (spawnT <= 0) { if (targets.length < 14) spawn(); spawnT = L.spawn * (.7 + Math.random() * .6); }
     if (timeLeft <= 0) end();
-    $('#sc').textContent = score; $('#tm').textContent = Math.max(0, timeLeft | 0); $('#cb').textContent = Math.min(combo, 5);
+    const hs = score + '|' + Math.max(0, timeLeft | 0) + '|' + Math.min(combo, 5);
+    if (hs !== hudS) { hudS = hs; $('#sc').textContent = score; $('#tm').textContent = Math.max(0, timeLeft | 0); $('#cb').textContent = Math.min(combo, 5); }
   }
   for (const t of [...targets]) {
     const u = t.userData; u.age += dt;
@@ -225,10 +250,17 @@ function loop(ts) {
     const t = targets.find(t => !t.userData.dead && t.position.distanceTo(p.m.position) < t.userData.r + p.r);
     if (t) { hit(t); removeFrom(projs, p); } else if (p.life <= 0) { combo = 0; removeFrom(projs, p); }
   }
+  if (tracerT > 0 && (tracerT -= dt) <= 0) tracer.visible = false;
   updateFx(dt); kick = Math.max(0, kick - dt * 6); shake = Math.max(0, shake - dt * 3);
   cam.position.set((Math.random() - .5) * shake * .2, (Math.random() - .5) * shake * .2, 0);
   if (view) updateView(view, ndc, cam, kick, performance.now() / 1000 - last >= WEAPONS[sel.weapon].cd * .9);
   for (const f of [...fx]) { f.life -= dt; if (f.life <= 0) removeFrom(fx, f); }
+  if (!running && !targets.length && !projs.length && !parts.length) return;
   renderer.render(scene, cam);
+  if (running && raw < .5) {
+    accT += raw; accN++;
+    if (accT >= 1.5) { const fps = accN / accT; accT = accN = 0;
+      if (fps < 40 && pr > .5) { good = 0; setPr(pr - .25); } else if (fps > 56 && pr < maxPr && ++good >= 3) { good = 0; setPr(pr + .25); } }
+  }
 }
 requestAnimationFrame(loop);
