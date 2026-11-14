@@ -206,7 +206,6 @@ async function board() {
     li.title = x.country ? cname(x.country) : 'Negara tidak diketahui'; if (x.me) li.className = 'me'; ol.append(li);
   });
   if (!ol.children.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = r ? 'Belum ada skor' : 'Peringkat tidak tersedia'; ol.append(li); }
-  $('#lbc').textContent = r?.countries?.length ? '🌍 Pemain dari: ' + r.countries.map(c => `${cname(c.country)} (${c.n})`).join(' · ') : '';
 }
 try { $('#name').value = localStorage.getItem('shoot3d-name') || ''; } catch {}
 const nameHint = (t, ok) => { const e = $('#nameHint'); e.textContent = t; e.className = 'hint' + (t ? (ok ? ' ok' : ' bad') : ''); };
@@ -312,7 +311,7 @@ async function end() {
     pending('Menyimpan skor');
     const r = await api('/api/score', { score, hits, shots, theme: sel.theme, weapon: sel.weapon, level: sel.level });
     if (r) {
-      note.textContent = auth.user ? '✅ Skor tersimpan' : '✅ Skor tersimpan atas nama tamu';
+      note.textContent = '';
       if (auth.user) {
         const before = auth.unlocked; auth.unlocked = r.unlocked || before;
         const fresh = auth.unlocked.filter(k => !before.includes(k));
@@ -322,7 +321,7 @@ async function end() {
       }
     } else note.textContent = '⚠ Skor gagal disimpan (periksa koneksi)';
   } else note.textContent = '⚠ Server tidak terjangkau, skor tidak tersimpan';
-  note.hidden = false; if (!auth.user) $('#endcta').hidden = false;
+  note.hidden = !note.textContent; if (!auth.user) $('#endcta').hidden = false;
   board();
 }
 $('#start').onclick = $('#again').onclick = start;
