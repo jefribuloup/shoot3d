@@ -79,9 +79,9 @@ const showErr = m => { const d = $('#err'); if (d) { d.hidden = false; d.textCon
 window.addEventListener('error', e => showErr(e.message));
 window.addEventListener('unhandledrejection', e => showErr(String(e.reason)));
 const sel = { theme: 'buah', weapon: 'pistol', level: 'easy' };
-const auth = { user: null, unlocked: ['easy'], cfg: null };
+const auth = { user: null, unlocked: ['easy'], cfg: null, guestOk: false };
 const ORDER = Object.keys(LEVELS);
-const allowed = k => auth.user ? auth.unlocked.includes(k) : k === ORDER[0];
+const allowed = k => auth.user ? auth.unlocked.includes(k) : true;
 let toastT;
 function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200); }
 
@@ -183,7 +183,8 @@ async function api(url, body) { const r = await apix(url, body); return r.ok ? r
 async function loadCfg() { auth.cfg = await api('/api/config'); }
 async function loadMe() {
   const me = await api('/api/me'); if (!me) return;
-  auth.user = me.user || null; auth.unlocked = me.unlocked || [ORDER[0]]; serverBest = me.best || {};
+  auth.user = me.user || null; auth.unlocked = me.user ? (me.unlocked || [ORDER[0]]) : ORDER.slice(); serverBest = me.best || {};
+  if (!me.user && me.guest && !$('#name').value.trim()) $('#name').value = me.guest.name;
   if (auth.user) {
     const p = auth.user.prefs || {};
     const ts = String(p.theme || '').split(',').filter(k => THEMES[k] && k !== 'custom'); if (ts.length) sel.theme = ts.join(',');
@@ -191,14 +192,30 @@ async function loadMe() {
   }
   drawMenu();
 }
+const cname = c => { try { return new Intl.DisplayNames(['id'], { type: 'region' }).of(c); } catch { return c; } };
+function flagEl(c) {
+  if (!/^[A-Z]{2}$/.test(c || '')) { const e = document.createElement('span'); e.className = 'flag'; e.textContent = '🌐'; return e; }
+  const i = document.createElement('img'); i.className = 'flag'; i.alt = c; i.loading = 'lazy'; i.src = `https://flagcdn.com/24x18/${c.toLowerCase()}.png`; return i;
+}
 async function board() {
   pending('Memuat peringkat');
   const r = await api('/api/leaderboard?level=' + sel.level), ol = $('#lb'); ol.innerHTML = '';
-  (r?.rows || []).forEach((x, i) => { const li = document.createElement('li'); li.textContent = `${x.name} — ${x.score}`; if (auth.user && x.name === auth.user.name) li.className = 'me'; ol.append(li); });
+  (r?.rows || []).forEach(x => {
+    const li = document.createElement('li'), t = document.createElement('span');
+    t.textContent = `${x.name} — ${x.score}`; li.append(flagEl(x.country), t);
+    li.title = x.country ? cname(x.country) : 'Negara tidak diketahui'; if (x.me) li.className = 'me'; ol.append(li);
+  });
   if (!ol.children.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = r ? 'Belum ada skor' : 'Peringkat tidak tersedia'; ol.append(li); }
+  $('#lbc').textContent = r?.countries?.length ? '🌍 Pemain dari: ' + r.countries.map(c => `${cname(c.country)} (${c.n})`).join(' · ') : '';
 }
 try { $('#name').value = localStorage.getItem('shoot3d-name') || ''; } catch {}
-$('#name').onchange = () => { try { localStorage.setItem('shoot3d-name', $('#name').value.trim()); } catch {} };
+const nameHint = (t, ok) => { const e = $('#nameHint'); e.textContent = t; e.className = 'hint' + (t ? (ok ? ' ok' : ' bad') : ''); };
+$('#name').oninput = () => nameHint('');
+$('#name').onchange = async () => {
+  const v = $('#name').value.trim(); try { localStorage.setItem('shoot3d-name', v); } catch {}
+  if (v.length < 2) return nameHint(v ? 'Minimal 2 karakter' : '', false);
+  const r = await api('/api/name?name=' + encodeURIComponent(v)); if (r) nameHint(r.available ? '✓ Nama tersedia' : '✗ Nama sudah dipakai, pilih yang lain', r.available);
+};
 const mePromise = Promise.all([loadCfg(), loadMe()]);
 
 function beep(f) {
@@ -266,6 +283,12 @@ let starting = false;
 async function start() {
   if (starting) return; starting = true; showLoad('Menyiapkan objek & senjata'); if (!allowed(sel.level)) sel.level = ORDER[0];
   await sleep(80);
+  if (!auth.user) {
+    const r = await apix('/api/guest', { name: $('#name').value.trim() });
+    if (r.ok) { auth.guestOk = true; nameHint(''); }
+    else if (r.status === 0) { auth.guestOk = false; toast('Server tidak terjangkau, skor tidak akan tersimpan'); }
+    else { await hideLoad(300); starting = false; nameHint(r.data?.error || 'Nama tidak valid', false); toast(r.data?.error || 'Nama tidak valid'); $('#name').focus(); return; }
+  }
   try {
   activeThemes = getThemes().filter(k => k !== 'custom' || customImgs.length); if (!activeThemes.length) activeThemes = ['campur'];
   activeThemes.forEach(k => makeTarget(k));
@@ -283,23 +306,23 @@ async function end() {
   serverBest[sel.level] = b;
   $('#endt').textContent = score >= LEVELS[sel.level].goal ? '🏆 Menang!' : '💥 Waktu Habis';
   $('#es').textContent = score; $('#eb').textContent = b; $('#end').hidden = false;
-  const won = score >= LEVELS[sel.level].goal, note = $('#endnote'), i = ORDER.indexOf(sel.level);
+  const won = score >= LEVELS[sel.level].goal, note = $('#endnote'), i = ORDER.indexOf(sel.level), saveOk = auth.user || auth.guestOk;
   note.hidden = true; $('#endcta').hidden = true;
-  if (auth.user) {
+  if (saveOk) {
     pending('Menyimpan skor');
     const r = await api('/api/score', { score, hits, shots, theme: sel.theme, weapon: sel.weapon, level: sel.level });
     if (r) {
-      const before = auth.unlocked; auth.unlocked = r.unlocked || before;
-      const fresh = auth.unlocked.filter(k => !before.includes(k));
-      if (fresh.length) note.textContent = '🔓 Level ' + fresh.map(k => LEVELS[k].name).join(', ') + ' terbuka!';
-      else if (!won && ORDER[i + 1] && !auth.unlocked.includes(ORDER[i + 1])) note.textContent = `Capai ${LEVELS[sel.level].goal} poin untuk membuka Level ${LEVELS[ORDER[i + 1]].name}`;
-      else note.textContent = '✅ Skor tersimpan';
-      drawMenu();
+      note.textContent = auth.user ? '✅ Skor tersimpan' : '✅ Skor tersimpan atas nama tamu';
+      if (auth.user) {
+        const before = auth.unlocked; auth.unlocked = r.unlocked || before;
+        const fresh = auth.unlocked.filter(k => !before.includes(k));
+        if (fresh.length) note.textContent = '🔓 Level ' + fresh.map(k => LEVELS[k].name).join(', ') + ' terbuka!';
+        else if (!won && ORDER[i + 1] && !auth.unlocked.includes(ORDER[i + 1])) note.textContent = `Capai ${LEVELS[sel.level].goal} poin untuk membuka Level ${LEVELS[ORDER[i + 1]].name}`;
+        drawMenu();
+      }
     } else note.textContent = '⚠ Skor gagal disimpan (periksa koneksi)';
-    note.hidden = false;
-  } else {
-    note.textContent = '👤 Mode Tamu: skor tidak disimpan & hanya Level Mudah.'; note.hidden = false; $('#endcta').hidden = false;
-  }
+  } else note.textContent = '⚠ Server tidak terjangkau, skor tidak tersimpan';
+  note.hidden = false; if (!auth.user) $('#endcta').hidden = false;
   board();
 }
 $('#start').onclick = $('#again').onclick = start;
@@ -369,7 +392,7 @@ $('#guestBtn').onclick = () => { setGuestSess(true); showMenu(); };
 $('#gnIn').onclick = $('#endcta').onclick = showAuth;
 $('#ubOut').onclick = async () => {
   showLoad('Keluar'); await api('/api/logout', {});
-  auth.user = null; auth.unlocked = [ORDER[0]]; serverBest = {}; setGuestSess(false); setMode('in'); showAuth(); await hideLoad(400);
+  auth.user = null; auth.unlocked = ORDER.slice(); serverBest = {}; setGuestSess(false); setMode('in'); showAuth(); await hideLoad(400);
 };
 async function initGoogle() {
   const id = auth.cfg?.googleClientId; if (!id) { $('#gwrap').hidden = true; return; }
