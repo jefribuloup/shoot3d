@@ -365,18 +365,19 @@ function loop(ts) {
   }
 }
 // ===== autentikasi =====
-let amode = 'in';
+let amode = 'in', gReady = false;
 const guestSess = () => { try { return sessionStorage.getItem('s3d-guest') === '1'; } catch { return false; } };
 const setGuestSess = v => { try { v ? sessionStorage.setItem('s3d-guest', '1') : sessionStorage.removeItem('s3d-guest'); } catch {} };
 function setMode(m) {
   amode = m; $('#tabIn').classList.toggle('on', m === 'in'); $('#tabUp').classList.toggle('on', m === 'up');
   $('#aName').hidden = m === 'in'; $('#aSubmit').textContent = m === 'in' ? 'Masuk' : 'Daftar'; $('#aMsg').textContent = '';
   $('#aPass').autocomplete = m === 'in' ? 'current-password' : 'new-password';
+  renderG();
 }
-const showAuth = () => { $('#menu').hidden = $('#end').hidden = true; $('#auth').hidden = false; };
-const showMenu = () => { $('#auth').hidden = true; $('#menu').hidden = false; drawMenu(); };
+const showAuth = () => { $('#menu').hidden = $('#end').hidden = true; $('#auth').hidden = false; gPrompt(); };
+const showMenu = () => { gCancel(); $('#auth').hidden = true; $('#menu').hidden = false; drawMenu(); };
 const route = () => { (auth.user || guestSess()) ? showMenu() : showAuth(); };
-async function afterLogin() { setGuestSess(false); await loadMe(); showMenu(); await hideLoad(500); }
+async function afterLogin() { gCancel(); setGuestSess(false); await loadMe(); showMenu(); await hideLoad(500); }
 $('#tabIn').onclick = () => setMode('in'); $('#tabUp').onclick = () => setMode('up');
 $('#authForm').onsubmit = async e => {
   e.preventDefault(); const msg = $('#aMsg'); msg.textContent = '';
@@ -390,19 +391,24 @@ $('#authForm').onsubmit = async e => {
 $('#guestBtn').onclick = () => { setGuestSess(true); showMenu(); };
 $('#gnIn').onclick = $('#endcta').onclick = showAuth;
 $('#ubOut').onclick = async () => {
-  showLoad('Keluar'); await api('/api/logout', {});
+  showLoad('Keluar'); await api('/api/logout', {}); try { google.accounts.id.disableAutoSelect(); } catch {}
   auth.user = null; auth.unlocked = ORDER.slice(); serverBest = {}; setGuestSess(false); setMode('in'); showAuth(); await hideLoad(400);
 };
+// One Tap + tombol Google: semuanya lewat popup/callback, tanpa pindah halaman atau reload
+const renderG = () => { if (!gReady) return; const b = $('#gbtn'); b.innerHTML = ''; google.accounts.id.renderButton(b, { theme: 'filled_blue', size: 'large', shape: 'pill', text: amode === 'in' ? 'signin_with' : 'signup_with', width: 280 }); };
+const gPrompt = () => { if (gReady && !auth.user && !$('#auth').hidden) try { google.accounts.id.prompt(); } catch {} };
+const gCancel = () => { if (gReady) try { google.accounts.id.cancel(); } catch {} };
 async function initGoogle() {
   const id = auth.cfg?.googleClientId; if (!id) { $('#gwrap').hidden = true; return; }
   try {
     await new Promise((res, rej) => { const el = document.createElement('script'); el.src = 'https://accounts.google.com/gsi/client'; el.async = true; el.onload = res; el.onerror = rej; document.head.append(el); });
-    google.accounts.id.initialize({ client_id: id, callback: async resp => {
-      showLoad('Masuk dengan Google');
-      const r = await apix('/api/auth/google', { credential: resp.credential });
-      if (!r.ok) { $('#aMsg').textContent = r.data?.error || 'Login Google gagal'; await hideLoad(300); return; }
-      await afterLogin(); } });
-    google.accounts.id.renderButton($('#gbtn'), { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'continue_with', width: 280 });
+    google.accounts.id.initialize({ client_id: id, ux_mode: 'popup', auto_select: false, cancel_on_tap_outside: false, use_fedcm_for_prompt: true, itp_support: true,
+      callback: async resp => {
+        showLoad('Masuk dengan Google');
+        const r = await apix('/api/auth/google', { credential: resp.credential });
+        if (!r.ok) { $('#aMsg').textContent = r.data?.error || 'Login Google gagal'; await hideLoad(300); return; }
+        await afterLogin(); } });
+    gReady = true; renderG(); gPrompt();
   } catch { $('#gwrap').hidden = true; }
 }
 
