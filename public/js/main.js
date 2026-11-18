@@ -114,36 +114,39 @@ function chips(box, data, key) {
 }
 const getThemes = () => sel.theme.split(',').filter(k => THEMES[k]);
 let activeThemes = [];
-// Pilihan objek target dikelompokkan per kategori, tiap pilihan diberi keterangan isinya
+// Pilihan target ala game: tiap kategori punya warna, nama seru, dan keterangan santai
 const THEME_GROUPS = [
-  { title: '📚 Alat Tulis & Belajar', keys: ['buku', 'pulpen'] },
-  { title: '🥗 Buah & Sayur', keys: ['buah', 'sayur'] },
-  { title: '🌊 Hewan', keys: ['laut'] },
-  { title: '🔧 Peralatan', keys: ['alat'] },
-  { title: '✨ Lainnya', keys: ['campur', 'custom'] }
+  { title: '📚 Anak Sekolah', color: '#4dabf7', keys: ['buku', 'pulpen'] },
+  { title: '🍉 Kebun Segar', color: '#69db7c', keys: ['buah', 'sayur'] },
+  { title: '🌊 Penghuni Laut', color: '#3bc9db', keys: ['laut'] },
+  { title: '🔨 Bengkel Seru', color: '#ff922b', keys: ['alat'] },
+  { title: '🎲 Bebas Gaya', color: '#f06595', keys: ['campur', 'custom'] }
 ];
 const THEME_INFO = {
-  buku: 'Buku dengan beragam warna sampul',
-  pulpen: 'Pulpen dengan beragam warna',
+  buku: 'Buku warna-warni, siap berhamburan!',
+  pulpen: 'Pulpen melayang, bidik yang jitu!',
   buah: 'Apel, jeruk, pisang, semangka, stroberi',
   sayur: 'Wortel, terong, brokoli, tomat',
-  laut: 'Ikan hias dan ubur-ubur',
+  laut: 'Ikan hias & ubur-ubur',
   alat: 'Martil, obeng, tang',
-  campur: 'Acak dari semua objek di atas',
-  custom: () => customImgs.length ? customImgs.length + ' gambar yang kamu unggah' : 'Unggah gambarmu lewat tombol di bawah'
+  campur: 'Semua diacak, makin seru!',
+  custom: () => customImgs.length ? customImgs.length + ' gambarmu siap ditembak!' : 'Unggah gambarmu lewat tombol di bawah'
 };
 function themeChips() {
   const box = $('#themes'); box.innerHTML = '';
+  const sec = box.closest('section'), hd = sec && sec.querySelector('h3');
+  if (hd && !hd.dataset.fun) { hd.dataset.fun = '1'; hd.innerHTML = '<em>2</em> Pilih Target Tembakanmu <small>boleh lebih dari satu!</small>'; }
   const cur = getThemes();
   for (const grp of THEME_GROUPS) {
     const keys = grp.keys.filter(k => THEMES[k]); if (!keys.length) continue;
     const wrap = document.createElement('div'), h = document.createElement('h4'), row = document.createElement('div');
-    wrap.className = 'tgrp'; row.className = 'trow'; h.textContent = grp.title; wrap.append(h, row);
+    wrap.className = 'tgrp'; wrap.style.setProperty('--c', grp.color); row.className = 'trow'; h.textContent = grp.title; wrap.append(h, row);
     for (const k of keys) {
-      const d = THEMES[k], b = document.createElement('button'), n = document.createElement('b'), s = document.createElement('small');
+      const d = THEMES[k], b = document.createElement('button'), ic = document.createElement('span'), tx = document.createElement('div'), n = document.createElement('b'), s = document.createElement('small');
       const info = typeof THEME_INFO[k] === 'function' ? THEME_INFO[k]() : (THEME_INFO[k] || '');
       b.type = 'button'; b.dataset.k = k; b.className = 'chip topt' + (cur.includes(k) ? ' on' : '');
-      n.textContent = d.icon + ' ' + d.name; s.textContent = info; b.append(n, s);
+      ic.className = 'ic'; ic.textContent = d.icon; tx.className = 'tx'; n.textContent = d.name; s.textContent = info;
+      tx.append(n, s); b.append(ic, tx);
       b.onclick = () => {
         let a = getThemes(); a = a.includes(k) ? a.filter(x => x !== k) : [...a, k];
         if (!a.length) a = [k];
