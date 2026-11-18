@@ -10,8 +10,25 @@ function initFx(scene) {
   for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ color: 0xffc04d, transparent: true, blending: THREE.AdditiveBlending })); m.visible = false; scene.add(m); flashPool.push(m); }
 }
 const take = a => { for (const m of a) if (!m.visible) { m.visible = true; return m; } return null; };
+
+// Ambil warna dari satu material. Aman untuk material yang tidak punya color/userData.
+function matColor(mt) {
+  if (!mt) return 0xffffff;
+  const c = mt.userData && mt.userData.c;
+  if (c !== undefined && c !== null) return c;
+  if (mt.map) return 0xffffff;
+  if (mt.color && typeof mt.color.getHex === 'function') return mt.color.getHex();
+  return 0xffffff;
+}
+
 function explode(scene, t) {
-  const cols = []; t.traverse(o => { if (o.isMesh) cols.push(o.material.userData.c ?? (o.material.map ? 0xffffff : o.material.color.getHex())); });
+  const cols = [];
+  t.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    // material bisa berupa array (mis. objek buku dengan sisi berbeda-beda)
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const mt of mats) cols.push(matColor(mt));
+  });
   if (!cols.length) cols.push(0xffffff);
   for (let i = 0; i < qty; i++) {
     const m = take(pool); if (!m) break; const z = .08 + Math.random() * .18;
@@ -251,7 +268,10 @@ function removeFrom(arr, o) { scene.remove(o.m || o); const i = arr.indexOf(o); 
 
 function hit(t) {
   const u = t.userData; if (u.dead) return; u.dead = 1;
-  combo++; hits++; score += 10 * LEVELS[sel.level].mult * Math.min(combo, 5); beep(880); explode(scene, t); shake = .6; removeFrom(targets, t);
+  combo++; hits++; score += 10 * LEVELS[sel.level].mult * Math.min(combo, 5); beep(880);
+  // efek ledakan tidak boleh menghentikan game bila gagal
+  try { explode(scene, t); } catch (e) { console.error('explode gagal', e); }
+  shake = .6; removeFrom(targets, t);
 }
 const knife = () => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.BoxGeometry(.05, .12, .6), new THREE.MeshBasicMaterial({ color: 0xdddddd })));
   const h = new THREE.Mesh(new THREE.BoxGeometry(.07, .1, .3), new THREE.MeshBasicMaterial({ color: 0x5c3b1e })); h.position.z = -.4; g.add(h); return g; };
@@ -358,7 +378,7 @@ function loop(ts) {
   for (const p of [...projs]) {
     p.m.position.addScaledVector(p.d, p.v * dt); p.life -= dt;
     const t = targets.find(t => !t.userData.dead && t.position.distanceTo(p.m.position) < t.userData.r + p.r);
-    if (t) { hit(t); removeFrom(projs, p); } else if (p.life <= 0) { combo = 0; removeFrom(projs, p); }
+    if (t) { removeFrom(projs, p); hit(t); } else if (p.life <= 0) { combo = 0; removeFrom(projs, p); }
   }
   if (tracerT > 0 && (tracerT -= dt) <= 0) tracer.visible = false;
   updateFx(dt); kick = Math.max(0, kick - dt * 6); shake = Math.max(0, shake - dt * 3);
