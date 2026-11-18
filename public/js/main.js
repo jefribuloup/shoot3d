@@ -114,48 +114,35 @@ function chips(box, data, key) {
 }
 const getThemes = () => sel.theme.split(',').filter(k => THEMES[k]);
 let activeThemes = [];
-// Pilihan target ala game: tiap kategori punya warna, nama seru, dan keterangan santai
-const THEME_GROUPS = [
-  { title: '📚 Anak Sekolah', color: '#4dabf7', keys: ['buku', 'pulpen'] },
-  { title: '🍉 Kebun Segar', color: '#69db7c', keys: ['buah', 'sayur'] },
-  { title: '🌊 Penghuni Laut', color: '#3bc9db', keys: ['laut'] },
-  { title: '🔨 Bengkel Seru', color: '#ff922b', keys: ['alat'] },
-  { title: '🎲 Bebas Gaya', color: '#f06595', keys: ['campur', 'custom'] }
+// Pilihan target ala game: 5 kartu, tiap kartu memuat beberapa tema sekaligus
+const THEME_CARDS = [
+  { id: 'tulis', title: 'Alat Tulis', icon: '✏️', color: '#4dabf7', keys: ['buku', 'pulpen'], info: 'Buku & pulpen warna-warni' },
+  { id: 'kebun', title: 'Kebun Segar', icon: '🍉', color: '#69db7c', keys: ['buah', 'sayur'], info: 'Apel, jeruk, pisang, semangka, stroberi, wortel, terong, brokoli, tomat' },
+  { id: 'laut', title: 'Hewan Laut', icon: '🐟', color: '#3bc9db', keys: ['laut'], info: 'Ikan hias & ubur-ubur' },
+  { id: 'alat', title: 'Peralatan', icon: '🔨', color: '#ff922b', keys: ['alat'], info: 'Martil, obeng, tang' },
+  { id: 'bebas', title: 'Bebas Gaya', icon: '🎲', color: '#f06595', keys: ['campur'], info: 'Semua objek diacak, makin seru!' },
+  // kartu ini baru muncul setelah pemain mengunggah gambar sendiri
+  { id: 'gambar', title: 'Gambar Saya', icon: '🖼️', color: '#ffd43b', keys: ['custom'], info: () => customImgs.length + ' gambarmu siap ditembak!', show: () => customImgs.length > 0 }
 ];
-const THEME_INFO = {
-  buku: 'Buku warna-warni, siap berhamburan!',
-  pulpen: 'Pulpen melayang, bidik yang jitu!',
-  buah: 'Apel, jeruk, pisang, semangka, stroberi',
-  sayur: 'Wortel, terong, brokoli, tomat',
-  laut: 'Ikan hias & ubur-ubur',
-  alat: 'Martil, obeng, tang',
-  campur: 'Semua diacak, makin seru!',
-  custom: () => customImgs.length ? customImgs.length + ' gambarmu siap ditembak!' : 'Unggah gambarmu lewat tombol di bawah'
-};
 function themeChips() {
   const box = $('#themes'); box.innerHTML = '';
   const sec = box.closest('section'), hd = sec && sec.querySelector('h3');
   if (hd && !hd.dataset.fun) { hd.dataset.fun = '1'; hd.innerHTML = '<em>2</em> Pilih Target Tembakanmu <small>boleh lebih dari satu!</small>'; }
-  const cur = getThemes();
-  for (const grp of THEME_GROUPS) {
-    const keys = grp.keys.filter(k => THEMES[k]); if (!keys.length) continue;
-    const wrap = document.createElement('div'), h = document.createElement('h4'), row = document.createElement('div');
-    wrap.className = 'tgrp'; wrap.style.setProperty('--c', grp.color); row.className = 'trow'; h.textContent = grp.title; wrap.append(h, row);
-    for (const k of keys) {
-      const d = THEMES[k], b = document.createElement('button'), ic = document.createElement('span'), tx = document.createElement('div'), n = document.createElement('b'), s = document.createElement('small');
-      const info = typeof THEME_INFO[k] === 'function' ? THEME_INFO[k]() : (THEME_INFO[k] || '');
-      b.type = 'button'; b.dataset.k = k; b.className = 'chip topt' + (cur.includes(k) ? ' on' : '');
-      ic.className = 'ic'; ic.textContent = d.icon; tx.className = 'tx'; n.textContent = d.name; s.textContent = info;
-      tx.append(n, s); b.append(ic, tx);
-      b.onclick = () => {
-        let a = getThemes(); a = a.includes(k) ? a.filter(x => x !== k) : [...a, k];
-        if (!a.length) a = [k];
-        sel.theme = a.join(',');
-        box.querySelectorAll('.topt').forEach(c => c.classList.toggle('on', a.includes(c.dataset.k)));
-      };
-      row.append(b);
-    }
-    box.append(wrap);
+  const cur = getThemes(), isOn = (c, a) => c.keys.some(k => a.includes(k));
+  const cards = THEME_CARDS.filter(c => (!c.show || c.show()) && c.keys.some(k => THEMES[k]));
+  for (const c of cards) {
+    const b = document.createElement('button'), ic = document.createElement('span'), tx = document.createElement('div'), n = document.createElement('b'), s = document.createElement('small');
+    b.type = 'button'; b.dataset.id = c.id; b.style.setProperty('--c', c.color); b.className = 'chip topt' + (isOn(c, cur) ? ' on' : '');
+    ic.className = 'ic'; ic.textContent = c.icon; tx.className = 'tx'; n.textContent = c.title; s.textContent = typeof c.info === 'function' ? c.info() : c.info;
+    tx.append(n, s); b.append(ic, tx);
+    b.onclick = () => {
+      const mine = c.keys.filter(k => THEMES[k]); let a = getThemes();
+      a = isOn(c, a) ? a.filter(k => !c.keys.includes(k)) : [...a, ...mine.filter(k => !a.includes(k))];
+      if (!a.length) a = mine;
+      sel.theme = a.join(',');
+      box.querySelectorAll('.topt').forEach(el => el.classList.toggle('on', isOn(cards.find(x => x.id === el.dataset.id), a)));
+    };
+    box.append(b);
   }
 }
 function levelChips() {
