@@ -11,7 +11,7 @@ function initFx(scene) {
 }
 const take = a => { for (const m of a) if (!m.visible) { m.visible = true; return m; } return null; };
 function explode(scene, t) {
-  const cols = []; t.traverse(o => { if (o.isMesh) cols.push(o.material.map ? 0xffffff : o.material.color.getHex()); });
+  const cols = []; t.traverse(o => { if (o.isMesh) cols.push(o.material.userData.c ?? (o.material.map ? 0xffffff : o.material.color.getHex())); });
   if (!cols.length) cols.push(0xffffff);
   for (let i = 0; i < qty; i++) {
     const m = take(pool); if (!m) break; const z = .08 + Math.random() * .18;
@@ -152,8 +152,17 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1630);
 scene.fog = new THREE.Fog(0x0b1630, 15, 48);
 const cam = new THREE.PerspectiveCamera(60, 1, .1, 100);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x334466, 1.8));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334466, 1.0));
 const dl = new THREE.DirectionalLight(0xffffff, 1.5); dl.position.set(3, 6, 4); scene.add(dl);
+// lingkungan pantulan sederhana (agar logam/kaca/buah mengkilap terlihat realistis)
+try {
+  const pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene(), sky = new THREE.Mesh(new THREE.SphereGeometry(10, 16, 8), new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true }));
+  const sp = sky.geometry.attributes.position, cs = [], c0 = new THREE.Color(0x24345f), c1 = new THREE.Color(0xe3ecff), tc = new THREE.Color();
+  for (let i = 0; i < sp.count; i++) { tc.lerpColors(c0, c1, (sp.getY(i) / 10 + 1) / 2); cs.push(tc.r, tc.g, tc.b); }
+  sky.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3)); es.add(sky);
+  for (const [x, y, z] of [[5, 5, 4], [-6, 3, 2], [0, 7, -3]]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(5, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 4, 4), side: THREE.DoubleSide })); p.position.set(x, y, z); p.lookAt(0, 0, 0); es.add(p); }
+  scene.environment = pm.fromScene(es, .03).texture; pm.dispose();
+} catch (e) { console.warn('env map dilewati', e); }
 { const p = []; for (let i = 0; i < 250; i++) p.push((Math.random() - .5) * 90, (Math.random() - .5) * 50, -30 - Math.random() * 20);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
   scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9db4ff, size: .15 }))); }
